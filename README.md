@@ -13,7 +13,7 @@ of voiding your warranty or bricking your device.
 - Remove pages from annotated PDFs 
 
 ### Demo 
-See [here](resources/demo.mp4) for a demo.
+See [here](https://www.reddit.com/r/RemarkableTablet/comments/pqod77/introducing_rmpdftools_insert_pages_and_delete/) for a demo.
 
 ## Installation 
 ### reMarkable
