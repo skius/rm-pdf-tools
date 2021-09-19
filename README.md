@@ -4,7 +4,7 @@
 the intended use case for this tool is to be run 24/7 on a computer,
 and your tablet requires an active internet connection.
 
-Right now, this tools probably requires more technical knowledge than hacks, however you do not run _any_ risk
+Right now, this tool might require more technical knowledge than hacks, however you do not run _any_ risk
 of voiding your warranty or bricking your device.
 
 ## Features 
