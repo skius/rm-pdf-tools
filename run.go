@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+	"github.com/google/uuid"
 	"io"
 	"sort"
 	"strings"
@@ -173,17 +174,21 @@ func runActionsContent(contentStr string, actions []Action) string {
 
 	// Leaving out content.Pages seems to fix the issue with empty pages having annotations on them: https://github.com/juruen/rmapi/issues/201
 
-	//pages := content.Pages
-	//for i := range pages {
-	//	pages[i] = uuid.New().String()
-	//}
-	//pages = _runActionsSlice(pages, actions, func() string {
-	//	randomUuid := uuid.New()
-	//	return randomUuid.String()
-	//})
+	pages := content.Pages
+	for i := range pages {
+		pages[i] = uuid.New().String()
+	}
+	pagesI := make([]interface{}, len(pages))
+	for i, p := range pages {
+		pagesI[i] = p
+	}
+	pages = _runActionsSlice(pagesI, actions, func() interface{} {
+		randomUuid := uuid.New()
+		return randomUuid.String()
+	})
 
-	//content.Pages = []string{}
-	//content.Pages = pages
+	// content.Pages = []string{}
+	content.Pages = pages
 
 	res, err := json.Marshal(&content)
 	if err != nil {
@@ -234,7 +239,7 @@ func _runActionsSlice(arr []interface{}, actions []Action, defaultCreator func()
 			//fmt.Println("after loop: arrPre:", arrPre, "arrMid:", arrMid, "arrPost:", arrPost)
 			arr = append(arrPre, arrMid...)
 			arr = append(arr, arrPost...)
-			//fmt.Println("arr final", arr)
+			fmt.Println("arr final", arr)
 
 		}
 	}
@@ -281,7 +286,7 @@ type Content struct {
 	Margins       int      `json:"margins"`
 	Orientation   string   `json:"orientation"`
 	PageCount     int      `json:"pageCount"`
-	//Pages         []string `json:"pages"`
+	Pages         []interface{} `json:"pages"`
 	TextAlignment string   `json:"textAlignment"`
 	TextScale     int      `json:"textScale"`
 }

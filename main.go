@@ -19,6 +19,8 @@ const remoteOriginalDir = remoteWorkDir + "original/"
 const remoteProcessedDir = remoteWorkDir + "processed/"
 
 func main() {
+    internalProcess("2a1","cf7231c8-34dd-4e87-8af9-5a29c28b291e", "ranson.zip", "ranson_output.zip")
+    return
 	c, err := cloud.New()
 	if err != nil {
 		panic(err)
@@ -33,22 +35,8 @@ func main() {
 		processFile(c, f)
 	}
 }
-
-func processFile(c *cloud.Cloud, node *model.Node) {
-	fmt.Println("Processing file:", node.Name())
-	docName := node.Name()
-	fileNameOriginal := docName + "_original.zip"
-	docNameProcessed := docName + "_processed"
-	fileNameProcessed := docNameProcessed + ".zip"
-
-	actions := ActionsFromString(node.Parent.Name())
-
-
-	err := c.Download(node, fileNameOriginal)
-	if err != nil {
-		panic(err)
-	}
-
+func internalProcess(nodename, nodeid, fileNameOriginal, fileNameProcessed string) {
+	actions := ActionsFromString(nodename)
 	r, err := zip.OpenReader(fileNameOriginal)
 	if err != nil {
 		panic(err)
@@ -71,6 +59,10 @@ func processFile(c *cloud.Cloud, node *model.Node) {
 		fmt.Println("In zip we have:", f.Name)
 
 
+        fi := f.FileInfo()
+        if fi.IsDir() {
+            continue
+        }
 		if strings.Contains(f.Name, "/") {
 			innerFiles = append(innerFiles, f)
 			innerFilesStr = append(innerFilesStr, f.FileInfo().Name())
@@ -79,7 +71,7 @@ func processFile(c *cloud.Cloud, node *model.Node) {
 
 		// Handle files in top-level (should only be uuid.pagedata and uuid.content and uuid.pdf)
 
-		newName := strings.ReplaceAll(f.Name, node.Id(), newUuid)
+		newName := strings.ReplaceAll(f.Name, nodeid, newUuid)
 		fw, err := w.Create(newName)
 		if err != nil {
 			panic(err)
@@ -121,6 +113,7 @@ func processFile(c *cloud.Cloud, node *model.Node) {
 	}
 
 	// Handle all files in "uuid/*"
+    print(innerFilesStr)
 	repl := runActionsLines(innerFilesStr, actions)
 	for _, f := range innerFiles {
 		innerName := f.FileInfo().Name()
@@ -166,6 +159,23 @@ func processFile(c *cloud.Cloud, node *model.Node) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func processFile(c *cloud.Cloud, node *model.Node) {
+	fmt.Println("Processing file:", node.Name())
+	docName := node.Name()
+	fileNameOriginal := docName + "_original.zip"
+	docNameProcessed := docName + "_processed"
+	fileNameProcessed := docNameProcessed + ".zip"
+
+    internalProcess(node.Parent.Name(), node.Id(), fileNameOriginal, fileNameProcessed)
+
+
+	err := c.Download(node, fileNameOriginal)
+	if err != nil {
+		panic(err)
+	}
+
 
 	_, err = c.Upload(fileNameProcessed, remoteProcessedDir)
 	if err != nil {
