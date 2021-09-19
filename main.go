@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/juruen/rmapi/model"
+	"github.com/skius/rm-pdf-tools/actions"
 	"github.com/skius/rm-pdf-tools/cloud"
 	"io"
 	"os"
@@ -30,56 +31,83 @@ func main() {
 		os.Exit(0)
 	}
 	for _, f := range files {
-		processFile(c, f)
+		processDoc(c, f)
 	}
 }
 
-func processFile(c *cloud.Cloud, node *model.Node) {
+// processDoc extracts actions, runs them, and uploads the new document for the given node.
+func processDoc(c *cloud.Cloud, node *model.Node) {
 	fmt.Println("Processing file:", node.Name())
 	docName := node.Name()
 	fileNameOriginal := docName + "_original.zip"
 	docNameProcessed := docName + "_processed"
 	fileNameProcessed := docNameProcessed + ".zip"
 
-	actions := ActionsFromString(node.Parent.Name())
-
+	acts := actions.FromString(node.Parent.Name())
 
 	err := c.Download(node, fileNameOriginal)
 	if err != nil {
 		panic(err)
 	}
 
+	processFile(node.Id(), fileNameOriginal, fileNameProcessed, acts)
+
+	_, err = c.Upload(fileNameProcessed, remoteProcessedDir)
+	if err != nil {
+		panic(err)
+	}
+	processed, err := c.FindFile(remoteProcessedDir + docNameProcessed)
+	if err != nil {
+		panic(err)
+	}
+	_, err = c.Move(processed, remoteProcessedDir, docName)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = c.Move(node, remoteOriginalDir, docName)
+	if err != nil {
+		panic(err)
+	}
+
+	err = os.Remove(fileNameOriginal)
+	if err != nil {
+		panic(err)
+	}
+	err = os.Remove(fileNameProcessed)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// processFile processes fileNameOriginal to fileNameProcessed after applying acts.
+func processFile(uuidOriginal, fileNameOriginal, fileNameProcessed string, acts actions.T) {
 	r, err := zip.OpenReader(fileNameOriginal)
 	if err != nil {
 		panic(err)
 	}
-	//bw := new(bytes.Buffer)
+
 	outFile, err := os.Create(fileNameProcessed)
 	if err != nil {
 		panic(err)
 	}
-
 	w := zip.NewWriter(outFile)
 
-	newUuid := uuid.New().String()
+	// Use a fresh UUID to avoid collisions when uploading the document
+	uuidNew := uuid.New().String()
 	innerFiles := []*zip.File{}
-	innerFilesStr := []string{}
-
+	innerFilesStrs := []string{}
 
 	for _, f := range r.File {
-		//fmt.Println("In zip we have:", f.FileInfo().Name())
-		fmt.Println("In zip we have:", f.Name)
-
-
+		// Handle inner files (annotations)
 		if strings.Contains(f.Name, "/") {
 			innerFiles = append(innerFiles, f)
-			innerFilesStr = append(innerFilesStr, f.FileInfo().Name())
+			innerFilesStrs = append(innerFilesStrs, f.FileInfo().Name())
 			continue
 		}
 
-		// Handle files in top-level (should only be uuid.pagedata and uuid.content and uuid.pdf)
-
-		newName := strings.ReplaceAll(f.Name, node.Id(), newUuid)
+		// Handle files in top-level (should only be uuid.pagedata, uuid.content and uuid.pdf)
+		newName := strings.ReplaceAll(f.Name, uuidOriginal, uuidNew)
 		fw, err := w.Create(newName)
 		if err != nil {
 			panic(err)
@@ -99,16 +127,16 @@ func processFile(c *cloud.Cloud, node *model.Node) {
 		var data []byte
 
 		if strings.HasSuffix(f.Name, ".content") {
-			newContent := runActionsContent(string(fb.Bytes()), actions)
+			newContent := actions.RunContent(string(fb.Bytes()), acts)
 			data = []byte(newContent)
 		} else if strings.HasSuffix(f.Name, ".pagedata") {
-			newPagedata := runActionsPagedata(string(fb.Bytes()), actions)
+			newPagedata := actions.RunPagedata(string(fb.Bytes()), acts)
 			data = []byte(newPagedata)
 		} else if strings.HasSuffix(f.Name, ".pdf") {
 			reader := bytes.NewReader(fb.Bytes())
 			buf := new(bytes.Buffer)
 
-			runActionsPdf(reader, buf, actions)
+			actions.RunPdf(reader, buf, acts)
 			data = buf.Bytes()
 		} else {
 			panic("unexpected file: " + f.Name)
@@ -121,17 +149,17 @@ func processFile(c *cloud.Cloud, node *model.Node) {
 	}
 
 	// Handle all files in "uuid/*"
-	repl := runActionsLines(innerFilesStr, actions)
+	repl := actions.RunLines(innerFilesStrs, acts)
 	for _, f := range innerFiles {
 		innerName := f.FileInfo().Name()
 		pr := repl[innerName]
 
-		fmt.Println("Processing replacement for:", innerName, "orig:", pr.originalIdx, "new:", pr.newIdx, "deleted:", pr.deleted)
-		if pr.deleted {
+		fmt.Println("Processing replacement for:", innerName, "orig:", pr.OriginalIdx, "new:", pr.NewIdx, "deleted:", pr.Deleted)
+		if pr.Deleted {
 			continue
 		}
 
-		newName := newUuid + "/" + strings.ReplaceAll(innerName, strconv.Itoa(pr.originalIdx), strconv.Itoa(pr.newIdx))
+		newName := uuidNew + "/" + strings.ReplaceAll(innerName, strconv.Itoa(pr.OriginalIdx), strconv.Itoa(pr.NewIdx))
 		fw, err := w.Create(newName)
 		if err != nil {
 			panic(err)
@@ -166,52 +194,6 @@ func processFile(c *cloud.Cloud, node *model.Node) {
 	if err != nil {
 		panic(err)
 	}
-
-	_, err = c.Upload(fileNameProcessed, remoteProcessedDir)
-	if err != nil {
-		panic(err)
-	}
-
-	processed, err := c.FindFile(remoteProcessedDir + docNameProcessed)
-	if err != nil {
-		panic(err)
-	}
-	_, err = c.Move(processed, remoteProcessedDir, docName)
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = c.Move(node, remoteOriginalDir, docName)
-	if err != nil {
-		panic(err)
-	}
-
-	err = os.Remove(fileNameOriginal)
-	if err != nil {
-		panic(err)
-	}
-	err = os.Remove(fileNameProcessed)
-	if err != nil {
-		panic(err)
-	}
 }
 
-func getIdxFromFileName(name string) int {
-	if strings.Contains(name, "-") {
-		// xxx-metadata.json
-		parts := strings.Split(name, "-")
-		idx, err := strconv.Atoi(parts[0])
-		if err != nil {
-			panic(err)
-		}
-		return idx
-	} else {
-		// xxx.rm
-		idxStr := name[:len(name)-3]
-		idx, err := strconv.Atoi(idxStr)
-		if err != nil {
-			panic(err)
-		}
-		return idx
-	}
-}
+
