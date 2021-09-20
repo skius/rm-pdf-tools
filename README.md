@@ -44,9 +44,11 @@ reMarkable cloud (courtesy of [rmapi](https://github.com/juruen/rmapi)).
 ### Merge documents
 
 To merge documents (currently supported are: annotated PDFs and notebooks), rename the documents
-in such a manner that their alphabetical order corresponds to the desired merge order. Then move them all
-_in a single go_ to the `/pdf-tools/merge/` directory and wait. Once the tool finishes, the merged document
-will appear in `/pdf-tools/processed/` and the original documents will be in `/pdf-tools/original/`.
+in such a manner that their alphabetical order corresponds to the desired merge order. Then move them all 
+to the `/pdf-tools/merge/` directory and wait for them to be synchronized.
+Then rename the `merge/` directory to `merge!/` (add a `!` to the end) and wait for the tool to take over.
+Once the tool finishes, the merged document will appear in `/pdf-tools/processed/` and the original documents
+will be in `/pdf-tools/original/`. Furthermore, the `merge!/` directory should be named `merge/` automatically again.
 
 You can merge PDFs with PDFs, PDFs with notebooks, and notebooks with notebooks. Note that currently the resulting
 document will be an annotated PDF, with the usual limitations. Additionally, the template background of
@@ -57,7 +59,8 @@ your notebooks will be replaced by a blank PDF page in the merged document.
 You wish to append your notebook `Homework Notes` to the end of the PDF `My Uni Assignment`. First,
 you rename the files to `1 My Uni Assignment` and `2 Homework Notes`, because you want the assignment to appear before
 your notes in the merged document. Then select both files (long press on the first file, short press on the second file)
-and select "Move" and move them to `/pdf-tools/merge/`.
+and select "Move" and move them to `/pdf-tools/merge/`. When you don't see any more cloud notifications, rename that
+folder to `merge!/`.
 
 If everything worked correctly, your merged PDF should appear in `/pdf-tools/processed/`.
 

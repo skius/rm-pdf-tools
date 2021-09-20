@@ -94,7 +94,7 @@ func (r *Cloud) FindNewFilesMerge(dir string) []*model.Node {
 
 	dirNode, err := r.api.Filetree.NodeByPath(dir, r.api.Filetree.Root())
 	if err != nil {
-		panic(err)
+		return nil
 	}
 
 	for _, node := range dirNode.Children {

@@ -11,7 +11,8 @@ import (
 
 const remoteWorkDir = "/pdf-tools/"
 const remoteWatchDir = remoteWorkDir + "work/"
-const remoteMergeDir = remoteWorkDir + "merge/"
+const remoteMergeDirActive = remoteWorkDir + "merge!/"
+const remoteMergeDirPassive = remoteWorkDir + "merge/"
 const remoteOriginalDir = remoteWorkDir + "original/"
 const remoteProcessedDir = remoteWorkDir + "processed/"
 
@@ -30,12 +31,21 @@ func main() {
 		}
 	}
 
-	docsToMerge := c.FindNewFilesMerge(remoteMergeDir)
+	docsToMerge := c.FindNewFilesMerge(remoteMergeDirActive)
 	if len(docsToMerge) == 0 {
 		fmt.Println("No docs to merge found!")
 	} else {
 		mergeDocs(c, docsToMerge)
+		md, err := c.FindFile(remoteMergeDirActive)
+		if err != nil {
+			panic(err)
+		}
+		_, err = c.Move(md, remoteWorkDir, "merge")
+		if err != nil {
+			panic(err)
+		}
 	}
+
 }
 
 // mergeDocs merges the given documents and uploads the resulting document (merge order is alphabetical in their names).
