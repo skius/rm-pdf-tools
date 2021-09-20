@@ -54,6 +54,9 @@ You can merge PDFs with PDFs, PDFs with notebooks, and notebooks with notebooks.
 document will be an annotated PDF, with the usual limitations. Additionally, the template background of
 your notebooks will be replaced by a blank PDF page in the merged document.
 
+A demo can be found [here](https://www.reddit.com/r/RemarkableTablet/comments/ps01cd/rmpdftools_now_allows_you_to_merge_any_number_of/). (This was from before you had to rename the `merge` folder to `merge!` - 
+other than that, everything works the same)
+
 #### Example
 
 You wish to append your notebook `Homework Notes` to the end of the PDF `My Uni Assignment`. First,
