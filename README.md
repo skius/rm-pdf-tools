@@ -7,10 +7,13 @@ and your tablet needs to be connected to the cloud.*
 *Right now, this tool might require more technical knowledge than hacks, however you do not run any risk
 of voiding your warranty or bricking your device.*
 
+*Please open an issue if you find a bug or unexpected behavior!*
+
 ## Features 
 `rm-pdf-tools` adds the following features to your reMarkable tablet (with an active internet connection):
 - Add blank pages to annotated PDFs 
 - Remove pages from annotated PDFs 
+- Merge any number of annotated PDFs and/or notebooks (this removes the templates at the moment)
 
 ### Demo 
 See [here](https://www.reddit.com/r/RemarkableTablet/comments/pqod77/introducing_rmpdftools_insert_pages_and_delete/) for a demo.
@@ -21,6 +24,7 @@ In the root (top-level) directory of your reMarkable cloud, create the following
 ```
 /pdf-tools/
 /pdf-tools/work/
+/pdf-tools/merge/
 /pdf-tools/original/
 /pdf-tools/processed/
 ```
@@ -36,6 +40,28 @@ Then start the service using `./start.sh` and follow the instructions to authent
 reMarkable cloud (courtesy of [rmapi](https://github.com/juruen/rmapi)).
 
 ## Usage 
+
+### Merge documents
+
+To merge documents (currently supported are: annotated PDFs and notebooks), rename the documents
+in such a manner that their alphabetical order corresponds to the desired merge order. Then move them all
+_in a single go_ to the `/pdf-tools/merge/` directory and wait. Once the tool finishes, the merged document
+will appear in `/pdf-tools/processed/` and the original documents will be in `/pdf-tools/original/`.
+
+You can merge PDFs with PDFs, PDFs with notebooks, and notebooks with notebooks. Note that currently the resulting
+document will be an annotated PDF, with the usual limitations. Additionally, the template background of
+your notebooks will be replaced by a blank PDF page in the merged document.
+
+#### Example
+
+You wish to append your notebook `Homework Notes` to the end of the PDF `My Uni Assignment`. First,
+you rename the files to `1 My Uni Assignment` and `2 Homework Notes`, because you want the assignment to appear before
+your notes in the merged document. Then select both files (long press on the first file, short press on the second file)
+and select "Move" and move them to `/pdf-tools/merge/`.
+
+If everything worked correctly, your merged PDF should appear in `/pdf-tools/processed/`.
+
+### Edit PDFs
 
 To add/delete pages of a PDF, simply create a folder in `/pdf-tools/work/`
 with a name following the [actions format](#Actions-format) corresponding to what you want to change about the PDF.

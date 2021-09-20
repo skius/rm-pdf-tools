@@ -1,21 +1,17 @@
 package main
 
 import (
-	"archive/zip"
-	"bytes"
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/juruen/rmapi/model"
 	"github.com/skius/rm-pdf-tools/actions"
 	"github.com/skius/rm-pdf-tools/cloud"
-	"io"
 	"os"
-	"strconv"
-	"strings"
+	"sort"
 )
 
 const remoteWorkDir = "/pdf-tools/"
 const remoteWatchDir = remoteWorkDir + "work/"
+const remoteMergeDir = remoteWorkDir + "merge/"
 const remoteOriginalDir = remoteWorkDir + "original/"
 const remoteProcessedDir = remoteWorkDir + "processed/"
 
@@ -25,13 +21,67 @@ func main() {
 		panic(err)
 	}
 
-	files := c.FindNewFiles(remoteWatchDir)
-	if len(files) == 0 {
-		fmt.Println("No files to process found! Exiting...")
-		os.Exit(0)
+	docsToEdit := c.FindNewFilesEdit(remoteWatchDir)
+	if len(docsToEdit) == 0 {
+		fmt.Println("No docs to edit found!")
+	} else {
+		for _, f := range docsToEdit {
+			processDoc(c, f)
+		}
 	}
-	for _, f := range files {
-		processDoc(c, f)
+
+	docsToMerge := c.FindNewFilesMerge(remoteMergeDir)
+	if len(docsToMerge) == 0 {
+		fmt.Println("No docs to merge found!")
+	} else {
+		mergeDocs(c, docsToMerge)
+	}
+}
+
+// mergeDocs merges the given documents and uploads the resulting document (merge order is alphabetical in their names).
+func mergeDocs(c *cloud.Cloud, nodes []*model.Node) {
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Name() < nodes[j].Name()
+	})
+	mkFileName := func(i int, uuid string) string { return fmt.Sprintf("doc-%d-%s.zip", i, uuid) }
+
+	fileNamesToMerge := make([]string, len(nodes))
+	uuids := make([]string, len(nodes))
+	for i, node := range nodes {
+		fn := mkFileName(i, node.Id())
+		err := c.Download(node, fn)
+		if err != nil {
+			panic(err)
+		}
+		fileNamesToMerge[i] = fn
+		uuids[i] = node.Id()
+	}
+
+	outDocName := "merged"
+	outFileName := outDocName + ".zip"
+	actions.MergeFiles(fileNamesToMerge, uuids, outFileName)
+
+	_, err := c.Upload(outFileName, remoteProcessedDir)
+	if err != nil {
+		panic(err)
+	}
+	for _, node := range nodes {
+		_, err = c.Move(node, remoteOriginalDir, node.Name())
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	err = os.Remove(outFileName)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, fn := range fileNamesToMerge {
+		err = os.Remove(fn)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -50,7 +100,7 @@ func processDoc(c *cloud.Cloud, node *model.Node) {
 		panic(err)
 	}
 
-	processFile(node.Id(), fileNameOriginal, fileNameProcessed, acts)
+	actions.RunFile(node.Id(), fileNameOriginal, fileNameProcessed, acts)
 
 	_, err = c.Upload(fileNameProcessed, remoteProcessedDir)
 	if err != nil {
@@ -79,121 +129,4 @@ func processDoc(c *cloud.Cloud, node *model.Node) {
 		panic(err)
 	}
 }
-
-// processFile processes fileNameOriginal to fileNameProcessed after applying acts.
-func processFile(uuidOriginal, fileNameOriginal, fileNameProcessed string, acts actions.T) {
-	r, err := zip.OpenReader(fileNameOriginal)
-	if err != nil {
-		panic(err)
-	}
-
-	outFile, err := os.Create(fileNameProcessed)
-	if err != nil {
-		panic(err)
-	}
-	w := zip.NewWriter(outFile)
-
-	// Use a fresh UUID to avoid collisions when uploading the document
-	uuidNew := uuid.New().String()
-	innerFiles := []*zip.File{}
-	innerFilesStrs := []string{}
-
-	for _, f := range r.File {
-		// Handle inner files (annotations)
-		if strings.Contains(f.Name, "/") {
-			innerFiles = append(innerFiles, f)
-			innerFilesStrs = append(innerFilesStrs, f.FileInfo().Name())
-			continue
-		}
-
-		// Handle files in top-level (should only be uuid.pagedata, uuid.content and uuid.pdf)
-		newName := strings.ReplaceAll(f.Name, uuidOriginal, uuidNew)
-		fw, err := w.Create(newName)
-		if err != nil {
-			panic(err)
-		}
-
-		fb := new(bytes.Buffer)
-		rc, err := f.Open()
-		_, err = io.Copy(fb, rc)
-		if err != nil {
-			panic(err)
-		}
-		err = rc.Close()
-		if err != nil {
-			panic(err)
-		}
-
-		var data []byte
-
-		if strings.HasSuffix(f.Name, ".content") {
-			newContent := actions.RunContent(string(fb.Bytes()), acts)
-			data = []byte(newContent)
-		} else if strings.HasSuffix(f.Name, ".pagedata") {
-			newPagedata := actions.RunPagedata(string(fb.Bytes()), acts)
-			data = []byte(newPagedata)
-		} else if strings.HasSuffix(f.Name, ".pdf") {
-			reader := bytes.NewReader(fb.Bytes())
-			buf := new(bytes.Buffer)
-
-			actions.RunPdf(reader, buf, acts)
-			data = buf.Bytes()
-		} else {
-			panic("unexpected file: " + f.Name)
-		}
-
-		_, err = fw.Write(data)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	// Handle all files in "uuid/*"
-	repl := actions.RunLines(innerFilesStrs, acts)
-	for _, f := range innerFiles {
-		innerName := f.FileInfo().Name()
-		pr := repl[innerName]
-
-		fmt.Println("Processing replacement for:", innerName, "orig:", pr.OriginalIdx, "new:", pr.NewIdx, "deleted:", pr.Deleted)
-		if pr.Deleted {
-			continue
-		}
-
-		newName := uuidNew + "/" + strings.ReplaceAll(innerName, strconv.Itoa(pr.OriginalIdx), strconv.Itoa(pr.NewIdx))
-		fw, err := w.Create(newName)
-		if err != nil {
-			panic(err)
-		}
-
-		fb := new(bytes.Buffer)
-		rc, err := f.Open()
-		_, err = io.Copy(fb, rc)
-		if err != nil {
-			panic(err)
-		}
-		err = rc.Close()
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = fw.Write(fb.Bytes())
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	err = w.Close()
-	if err != nil {
-		panic(err)
-	}
-	err = outFile.Close()
-	if err != nil {
-		panic(err)
-	}
-	err = r.Close()
-	if err != nil {
-		panic(err)
-	}
-}
-
 

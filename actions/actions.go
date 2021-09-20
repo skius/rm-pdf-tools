@@ -1,14 +1,18 @@
 package actions
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+	"github.com/skius/rm-pdf-tools/document"
 	"io"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -19,6 +23,122 @@ func Sort(actions []Action) {
 
 		return iP < jP
 	})
+}
+
+// RunFile processes fileNameOriginal to fileNameProcessed after applying acts.
+func RunFile(uuidOriginal, fileNameOriginal, fileNameProcessed string, acts []Action) {
+	r, err := zip.OpenReader(fileNameOriginal)
+	if err != nil {
+		panic(err)
+	}
+
+	outFile, err := os.Create(fileNameProcessed)
+	if err != nil {
+		panic(err)
+	}
+	w := zip.NewWriter(outFile)
+
+	// Use a fresh UUID to avoid collisions when uploading the document
+	uuidNew := uuid.New().String()
+	innerFiles := []*zip.File{}
+	innerFilesStrs := []string{}
+
+	for _, f := range r.File {
+		// Handle inner files (annotations)
+		if strings.Contains(f.Name, "/") {
+			innerFiles = append(innerFiles, f)
+			innerFilesStrs = append(innerFilesStrs, f.FileInfo().Name())
+			continue
+		}
+
+		// Handle files in top-level (should only be uuid.pagedata, uuid.content and uuid.pdf)
+		newName := strings.ReplaceAll(f.Name, uuidOriginal, uuidNew)
+		fw, err := w.Create(newName)
+		if err != nil {
+			panic(err)
+		}
+
+		fb := new(bytes.Buffer)
+		rc, err := f.Open()
+		_, err = io.Copy(fb, rc)
+		if err != nil {
+			panic(err)
+		}
+		err = rc.Close()
+		if err != nil {
+			panic(err)
+		}
+
+		var data []byte
+
+		if strings.HasSuffix(f.Name, ".content") {
+			newContent := RunContent(string(fb.Bytes()), acts)
+			data = []byte(newContent)
+		} else if strings.HasSuffix(f.Name, ".pagedata") {
+			newPagedata := RunPagedata(string(fb.Bytes()), acts)
+			data = []byte(newPagedata)
+		} else if strings.HasSuffix(f.Name, ".pdf") {
+			reader := bytes.NewReader(fb.Bytes())
+			buf := new(bytes.Buffer)
+
+			RunPdf(reader, buf, acts)
+			data = buf.Bytes()
+		} else {
+			panic("unexpected file: " + f.Name)
+		}
+
+		_, err = fw.Write(data)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	// Handle all files in "uuid/*"
+	repl := RunLines(innerFilesStrs, acts)
+	for _, f := range innerFiles {
+		innerName := f.FileInfo().Name()
+		pr := repl[innerName]
+
+		fmt.Println("Processing replacement for:", innerName, "orig:", pr.OriginalIdx, "new:", pr.NewIdx, "deleted:", pr.Deleted)
+		if pr.Deleted {
+			continue
+		}
+
+		newName := uuidNew + "/" + strings.ReplaceAll(innerName, strconv.Itoa(pr.OriginalIdx), strconv.Itoa(pr.NewIdx))
+		fw, err := w.Create(newName)
+		if err != nil {
+			panic(err)
+		}
+
+		fb := new(bytes.Buffer)
+		rc, err := f.Open()
+		_, err = io.Copy(fb, rc)
+		if err != nil {
+			panic(err)
+		}
+		err = rc.Close()
+		if err != nil {
+			panic(err)
+		}
+
+		_, err = fw.Write(fb.Bytes())
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	err = w.Close()
+	if err != nil {
+		panic(err)
+	}
+	err = outFile.Close()
+	if err != nil {
+		panic(err)
+	}
+	err = r.Close()
+	if err != nil {
+		panic(err)
+	}
 }
 
 // RunPdf takes a PDF as input and writes the resulting PDF after applying actions to outW.
@@ -124,7 +244,7 @@ func RunPagedata(pagedata string, actions []Action) string {
 func RunContent(contentStr string, actions []Action) string {
 	Sort(actions)
 
-	content := Content{}
+	content := document.Content{}
 	err := json.Unmarshal([]byte(contentStr), &content)
 	if err != nil {
 		panic(err)

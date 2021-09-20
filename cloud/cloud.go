@@ -38,7 +38,7 @@ func (r *Cloud) Download(node *model.Node, dst string) error {
 	return r.api.FetchDocument(node.Id(), dst)
 }
 
-// Upload uploads the file src to dstPath in the cloud.
+// Upload uploads the file src to folder dstPath in the cloud.
 func (r *Cloud) Upload(src string, dstPath string) (*model.Document, error) {
 	dstNode, err := r.api.Filetree.NodeByPath(dstPath, r.api.Filetree.Root())
 	if err != nil {
@@ -66,9 +66,9 @@ func (r *Cloud) FindFile(path string) (*model.Node, error) {
 	return r.api.Filetree.NodeByPath(path, r.api.Filetree.Root())
 }
 
-// FindNewFiles provides all files in subdirectories of the provided directory.
-// e.g. FindNewFiles("pdf-tools") -> ["pdf-tools/sub1/file1", "pdf-tools/sub2/file2"]
-func (r *Cloud) FindNewFiles(dir string) []*model.Node {
+// FindNewFilesEdit provides all files in subdirectories of the provided directory.
+// e.g. FindNewFilesEdit("pdf-tools") -> ["pdf-tools/sub1/file1", "pdf-tools/sub2/file2"]
+func (r *Cloud) FindNewFilesEdit(dir string) []*model.Node {
 	files := make([]*model.Node, 0)
 
 	dirNode, err := r.api.Filetree.NodeByPath(dir, r.api.Filetree.Root())
@@ -83,6 +83,22 @@ func (r *Cloud) FindNewFiles(dir string) []*model.Node {
 			files = append(files, child)
 		}
 		fmt.Println()
+	}
+
+	return files
+}
+
+// FindNewFilesMerge returns all files in the provided directory.
+func (r *Cloud) FindNewFilesMerge(dir string) []*model.Node {
+	files := make([]*model.Node, 0)
+
+	dirNode, err := r.api.Filetree.NodeByPath(dir, r.api.Filetree.Root())
+	if err != nil {
+		panic(err)
+	}
+
+	for _, node := range dirNode.Children {
+		files = append(files, node)
 	}
 
 	return files
