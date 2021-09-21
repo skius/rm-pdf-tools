@@ -19,8 +19,7 @@ var emptyPdf []byte
 type Document struct {
 	Uuid string
 	Content Content
-	Pagedata []string //TODO: maybe refactor into []string without the blank line,
-	// and add doc.SerializePagedata that adds the blank line again
+	Pagedata []string
 	RmFiles map[string][]byte
 }
 
