@@ -15,7 +15,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/hhrutter/lzw v0.0.0-20190829144645-6f07a24e8650 // indirect
 	github.com/hhrutter/tiff v0.0.0-20190829141212-736cae8d0bc7 // indirect
-	github.com/juruen/rmapi v0.0.15
+	github.com/juruen/rmapi v0.0.18
 	github.com/mattn/go-colorable v0.1.6 // indirect
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
@@ -30,3 +30,5 @@ require (
 	golang.org/x/text v0.3.6 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+require github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
